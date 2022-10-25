@@ -667,11 +667,20 @@ static void handleClientInteraction(CoAP_Interaction_t* pIA) {
 			pIA->RespCB(pIA->pRespMsg, pIA->pReqMsg, &(pIA->RemoteEp)); //call callback
 		}
 
-//			pIA->State = COAP_STATE_FINISHED;
-//			CoAP_EnqueueLastInteraction(pIA);
-		CoAP_DeleteInteraction(
-				pIA); //direct delete, todo: eventually wait some time to send ACK instead of RST if out ACK to remote reponse was lost
-
+		// Add support for Client based requests with the Observer option
+		// Check if response has the Observe flag, and reset state.
+		// Ensure we don't remove original Request as it is required for token comparison!
+		if (NULL != CoAP_FindOptionByNumber(pIA->pRespMsg, OPT_NUM_OBSERVE)) 
+			{
+			pIA->State              = COAP_STATE_WAITING_RESPONSE;
+			pIA->pReqMsg->Type      = NON;
+			pIA->pReqMsg->Timestamp = hal_rtc_1Hz_Cnt();
+			RemoveObserveOptionFromMsg(pIA->pRespMsg);
+			CoAP_SetSleepInteraction(pIA, POSTPONE_MAX_WAIT_TIME);
+			CoAP_EnqueueLastInteraction(pIA);
+		} else {
+			CoAP_DeleteInteraction(pIA); //direct delete, todo: eventually wait some time to send ACK instead of RST if out ACK to remote reponse was lost
+		}		
 	} else {
 		if (pIA->RespCB != NULL) {
 			pIA->RespCB(NULL, pIA->pReqMsg, &pIA->RemoteEp);
